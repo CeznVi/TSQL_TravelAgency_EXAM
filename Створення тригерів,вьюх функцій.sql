@@ -207,27 +207,34 @@ ORDER BY [Дата почачтку]
 GO
 CREATE VIEW [vTopCountryAmongTourAndArhiveTour]
 AS
-	SELECT 
-			[T].[id] AS 'tourId',
-			[CTPL].[CountPayedTour] AS 'CountPayedTour',
-			[TA].[id] AS 'arhiveTourId'
-	FROM [Tour] AS [T] JOIN (SELECT [tourId] AS 'tourId', [tourArchiveId] AS 'tourArchiveId',COUNT([customerId]) AS 'CountPayedTour'
-							FROM [CustomerTourPayedList]
-							GROUP BY [tourId], [tourArchiveId]) AS [CTPL] 
-		ON [T].[id] = [CTPL].[tourId]
-		JOIN [TourArhive] AS [TA] ON [TA].[id] = [CTPL].[tourArchiveId]
-		
-		
-		
-		
+	SELECT TOP(1)
+		[Назва країни] AS 'Найпопулярніша країна (за найбільшою кількістю турів з урах. архівних)',
+		SUM([Кількість турів]) AS 'Сумарна кількість турів'
+	FROM
+		(SELECT
+			[Country].[countryName] AS 'Назва країни',
+			COUNT([T].[id]) AS 'Кількість турів'
+		FROM [Tour] AS [T] JOIN [VisitCountryCity] AS [VCC] ON [T].[id] = [VCC].[tourId]
+			 JOIN [Country] ON [VCC].[countryId] = [Country].[id]
+		GROUP BY [countryName], [T].[id]
+		UNION ALL
+		SELECT
+			[Country].[countryName] AS 'Назва країни',
+			COUNT([TA].[id]) AS 'Кількість турів'
+		FROM [TourArhive] AS [TA] JOIN [VisitCountryCity] AS [VCC] ON [TA].[id] = [VCC].[tourArchiveId]
+			 JOIN [Country] ON [VCC].[countryId] = [Country].[id]
+		GROUP BY [countryName], [TA].[id]) AS [Temp]
+	GROUP BY [Назва країни]
+	ORDER BY [Сумарна кількість турів] DESC
 
 GO
 
 -------------------------END-------------------------
 -----------------------Перевірка роботи--------------
+SELECT * 
+FROM [vTopCountryAmongTourAndArhiveTour]
 
-
-
+--------------------****************************Кінець перевірки****************************----------------------
 
 
 
@@ -235,6 +242,11 @@ GO
 
 
 --------------------ПОКА НЕ УДАЛЯТЬ
+SELECT *
+FROM [Tour]
+
+
+
 SELECT
 	[VCC].[tourId] AS 'tourId',
 	STRING_AGG(CONVERT(nvarchar(MAX), [Ctry].[countryName]), ', ') AS 'Countrys'
