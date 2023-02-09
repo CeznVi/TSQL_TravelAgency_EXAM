@@ -236,6 +236,31 @@ FROM [vTopCountryAmongTourAndArhiveTour]
 
 --------------------****************************Кінець перевірки****************************----------------------
 
+----************************************************************************************************************************
+/* Показати найпопулярніший актуальний тур (за максимальною кількістю куплених туристичних путівок) */
+---------------------ВЬЮХА-----------------------
+GO
+CREATE VIEW [vTopTourByByedTickets]
+AS
+		SELECT TOP(1)
+				[T].[name] AS 'Назва туру',
+				[T].[price] AS 'Вартість',
+				[T].[startDate] AS 'Дата почачтку',
+				[T].[finishDate] AS 'Дата закінчення',
+				[T].[maxTouristCount] AS 'Ємність туру (людей)',
+				[CTPL].[HwMany] AS 'Кількість куплених турів'
+			FROM [Tour] AS [T] JOIN (SELECT [tourId] AS 'tourId', COUNT([customerId]) AS 'HwMany'
+									FROM [CustomerTourPayedList]
+									GROUP BY [tourId]) AS [CTPL] 
+				ON [T].[id] = [CTPL].[tourId]
+			ORDER BY [CTPL].[HwMany] DESC
+GO
+-------------------------END-------------------------
+
+-----------------------Перевірка роботи--------------
+SELECT * 
+FROM [vTopTourByByedTickets]
+
 
 
 
