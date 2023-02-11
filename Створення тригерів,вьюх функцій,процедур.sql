@@ -605,6 +605,76 @@ FROM [dbo].GetInformationByTourByTypeTransport('автобус')
 ----************************************************************************************************************************
 /* При вставці нового клієнта необхідно перевіряти, чи немає його вже в базі даних. 
 Якщо такий клієнт є, генерувати помилку з описом проблеми, що виникла */
+---------------------ТРИГЕР-----------------------
+GO
+CREATE TRIGGER CheckNewCustomers
+ON [Customers]
+INSTEAD OF INSERT 
+AS
+	BEGIN
+		DECLARE @InsertFName nvarchar(50)
+		DECLARE @InsertSName nvarchar(50)
+		DECLARE @InsertLName nvarchar(50)
+		DECLARE @InsertBday Date
+		DECLARE @InsertTId int
+
+	SELECT 
+		@InsertFName = [inserted].[firstName],
+		@InsertSName = [inserted].[surName],
+		@InsertLName = [inserted].[lastName],
+		@InsertTId = [inserted].[telephoneId],
+		@InsertBday = [inserted].[birthDay]
+	FROM [inserted]
+
+		IF (EXISTS (SELECT * 
+					FROM [Customers] AS [C]
+					WHERE [C].[firstName] = @InsertFName
+						  AND [C].[surName] = @InsertSName
+						  AND [C].[lastName] = @InsertLName
+						  AND [C].[birthDay] = @InsertBday
+						  AND [C].[telephoneId] = @InsertTId))
+			BEGIN
+				RAISERROR('Такий клієнт уже є в базі!',0,1)
+				ROLLBACK TRANSACTION
+			END
+		ELSE
+			BEGIN
+
+				INSERT INTO [Customers] ([firstName],[surName],[lastName],[email],[telephoneId],[birthDay])
+				SELECT [firstName], [surName], [lastName], [email], [telephoneId], [birthDay]
+				FROM [inserted]
+				
+				PRINT ('Кліента успішно додано')
+			END
+	END
+-------------------------END-------------------------
+-----------------------Перевірка роботи--------------
+---Виведемо всіх кліентів тур агенства
+SELECT * FROM [Customers]
+
+-----Спробуємо додати кліента(КЛОНА) який уже точно е в базі(буде помилка так як поле EMAIL унікальний ключ)
+
+INSERT [Customers] ([firstName], [surName], [lastName], [email], [telephoneId], [birthDay]) 
+VALUES (N'Цікавиться', N'Турами', N'Некупуйченко', N'n1@g.com', 19, CAST(N'1980-01-01' AS Date))
+
+-----Змінемо клону ЕМАЙЛ і спробуємо додати (Спойлер-- не вийде, трігер спрацює)
+
+INSERT [Customers] ([firstName], [surName], [lastName], [email], [telephoneId], [birthDay]) 
+VALUES (N'Цікавиться', N'Турами', N'Некупуйченко', N'n1777@g.com', 19, CAST(N'1980-01-01' AS Date))
+
+---Для тесту сробуємо додати не клона (Спойлер -- буде успішно додано)
+INSERT [Customers] ([firstName], [surName], [lastName], [email], [telephoneId], [birthDay]) 
+VALUES (N'Цік', N'Тур', N'Некуп', N'n177787@g.com', 19, CAST(N'1988-01-01' AS Date))
+
+---Подивимось результати додавання
+SELECT * 
+FROM [Customers]
+ORDER BY [id] DESC
+
+--------------------****************************Кінець перевірки****************************----------------------
+
+
+
 
 
 
