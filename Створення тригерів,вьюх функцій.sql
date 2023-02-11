@@ -313,18 +313,137 @@ SELECT *
 FROM [vTopArhiveTourByByedTickets]
 --------------------****************************Кінець перевірки****************************----------------------
 
+----************************************************************************************************************************
+/*  Показати найпопулярніший актуальний тур (за мінімальною кількістю куплених туристичних путівок); */
+---------------------ВЬЮХА-----------------------
+GO
+CREATE VIEW [vTopTourByMinByedTickets]
+AS
+		SELECT TOP(1)
+				[T].[name] AS 'Назва туру',
+				[T].[price] AS 'Вартість',
+				[T].[startDate] AS 'Дата почачтку',
+				[T].[finishDate] AS 'Дата закінчення',
+				[T].[maxTouristCount] AS 'Ємність туру (людей)',
+				[CTPL].[HwMany] AS 'Кількість куплених турів'
+			FROM [Tour] AS [T] JOIN (SELECT [tourId] AS 'tourId', COUNT([customerId]) AS 'HwMany'
+									FROM [CustomerTourPayedList]
+									GROUP BY [tourId]) AS [CTPL] 
+				ON [T].[id] = [CTPL].[tourId]
+			ORDER BY [CTPL].[HwMany] 
+GO
+-------------------------END-------------------------
+
+-----------------------Перевірка роботи--------------
+SELECT * 
+FROM [vTopTourByMinByedTickets]
+--------------------****************************Кінець перевірки****************************----------------------
+
+----************************************************************************************************************************
+/*  Показати для конкретного туриста по ПІБ список усіх його турів. ПІБ туриста передається як параметр; */
+---------------------ФУНКЦІЯ-----------------------
+GO
+CREATE FUNCTION [dbo].GetInformationByTouristByByedTour(@PIB nvarchar(155))
+RETURNS TABLE
+AS
+	RETURN (
+		   SELECT 
+				[T].[name] AS 'Назва туру',
+				[T].[price] AS 'Вартість',
+				[T].[startDate] AS 'Дата почачтку',
+				[T].[finishDate] AS 'Дата закінчення',
+				[TC].[Countrys] AS 'Відвідуємі країни'
+			FROM [Tour] AS [T] JOIN [CustomerTourPayedList] AS [CTPL] ON [T].[id] = [CTPL].[tourId]
+				JOIN (SELECT
+							[VCC].[tourId] AS 'tourId',
+							STRING_AGG(CONVERT(nvarchar(MAX), [Ctry].[countryName]), ', ') AS 'Countrys'
+						FROM (SELECT DISTINCT [VisitCountryCity].[countryId] AS 'CountryID', [VisitCountryCity].[tourId] AS 'tourId'
+								FROM [VisitCountryCity]) AS [VCC] JOIN [Country] AS [Ctry] ON [VCC].[countryId] = [Ctry].[id]
+						GROUP BY [VCC].[tourId]) AS [TC]
+					ON [T].[id] = [TC].[tourId]
+				 JOIN (SELECT 
+						[Customers].[id] AS 'id',
+						[Customers].[firstName] + SPACE(1) + [Customers].[surName] + SPACE(1) + [Customers].[lastName] AS 'PIB'
+					   FROM [Customers]) AS [C] ON [CTPL].[customerId] = [C].[id]
+			WHERE [C].[PIB] LIKE @PIB
+		UNION ALL
+		SELECT 
+				[T].[name] AS 'Назва туру',
+				[T].[price] AS 'Вартість',
+				[T].[startDate] AS 'Дата почачтку',
+				[T].[finishDate] AS 'Дата закінчення',
+				[TC].[Countrys] AS 'Відвідуємі країни'
+			FROM [TourArhive] AS [T] JOIN [CustomerTourPayedList] AS [CTPL] ON [T].[id] = [CTPL].[tourArchiveId]
+				JOIN (SELECT
+							[VCC].[tourId] AS 'tourId',
+							STRING_AGG(CONVERT(nvarchar(MAX), [Ctry].[countryName]), ', ') AS 'Countrys'
+						FROM (SELECT DISTINCT [VisitCountryCity].[countryId] AS 'CountryID', [VisitCountryCity].[tourArchiveId] AS 'tourId'
+								FROM [VisitCountryCity]) AS [VCC] JOIN [Country] AS [Ctry] ON [VCC].[countryId] = [Ctry].[id]
+						GROUP BY [VCC].[tourId]) AS [TC]
+					ON [T].[id] = [TC].[tourId]
+				 JOIN (SELECT 
+						[Customers].[id] AS 'id',
+						[Customers].[firstName] + SPACE(1) + [Customers].[surName] + SPACE(1) + [Customers].[lastName] AS 'PIB'
+					   FROM [Customers]) AS [C] ON [CTPL].[customerId] = [C].[id]
+			WHERE [C].[PIB] LIKE @PIB
+			)
+GO
+-------------------------END-------------------------
+
+-----------------------Перевірка роботи--------------
+--Подивимось всі тури для конкретного туриста Покупець1 Турів1 Покупуйченко1
+SELECT * 
+FROM [dbo].GetInformationByTouristByByedTour('%Покупець1 Турів1 Покупуйченко1%')
+ORDER BY [Дата почачтку]
+
+--Подивимось всі тури для конкретного туриста Покупець1 Турів1 Покупуйченко1
+SELECT * 
+FROM [dbo].GetInformationByTouristByByedTour('%Покупець3 Турів3 Покупуйченко3%')
+ORDER BY [Дата почачтку]
+--------------------****************************Кінець перевірки****************************----------------------
 
 
+----************************************************************************************************************************
+/* Перевірити для конкретного туриста по ПІБ чи перебуває він зараз у турі. ПІБ туриста передається як параметр; */
+---------------------ФУНКЦІЯ-----------------------
+GO
+CREATE FUNCTION [dbo].GetInformationByTouristOnTourNow(@PIB nvarchar(155))
+RETURNS TABLE
+AS
+	RETURN (
+		   SELECT 
+				[T].[name] AS 'Назва туру',
+				[T].[price] AS 'Вартість',
+				[T].[startDate] AS 'Дата почачтку',
+				[T].[finishDate] AS 'Дата закінчення'
+			FROM [Tour] AS [T] JOIN [CustomerTourPayedList] AS [CTPL] ON [T].[id] = [CTPL].[tourId]
+				 JOIN (SELECT 
+						[Customers].[id] AS 'id',
+						[Customers].[firstName] + SPACE(1) + [Customers].[surName] + SPACE(1) + [Customers].[lastName] AS 'PIB'
+					   FROM [Customers]) AS [C] ON [CTPL].[customerId] = [C].[id]
+			WHERE [C].[PIB] LIKE @PIB
+				AND GETDATE() >= [T].[startDate] 
+				AND GETDATE() <= [T].[finishDate]
+				
+			)
+GO
+-------------------------END-------------------------
 
+-----------------------Перевірка роботи--------------
+--Трохи змінемо існуюючу базу для перевірки роботи функції
+UPDATE [Tour]
+SET [startDate] = GETDATE() - 2
+WHERE [id] = 30;
 
+--Подивимось конкретного туриста Покупець3 Турів3 Покупуйченко3
+SELECT * 
+FROM [dbo].GetInformationByTouristOnTourNow('%Покупець3 Турів3 Покупуйченко3%')
 
-
-
-
-
-
-
-
+--ПОВЕРНЕМО назад зміни
+UPDATE [Tour]
+SET [startDate] = '2023-04-04'
+WHERE [id] = 30;
+--------------------****************************Кінець перевірки****************************----------------------
 
 
 
