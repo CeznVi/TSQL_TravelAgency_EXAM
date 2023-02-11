@@ -15,35 +15,62 @@ AS
 		SELECT @ID = [id]
 		FROM deleted
 
-
 		INSERT INTO [TourArhive] ([id], [name], [price], [startDate], [finishDate], [responsibleWorkerId], [maxTouristCount])
 		SELECT [id], [name], [price], [startDate], [finishDate], [responsibleWorkerId], [maxTouristCount]
 		FROM deleted
 		PRINT ('Тур успішно переміщено у таблицю TourArhive')
-		
-		UPDATE [VisitCountryCity]
-		SET [tourArchiveId] = @ID
-		WHERE [tourId] IS NULL;
+	END
+GO
+---------------------ПРОЦЕДУРА-----------------------
+GO
+CREATE PROCEDURE DeleteNotActualTour
+AS
+	BEGIN
+		DECLARE @Count int
+		DECLARE @EndCount int
+		DECLARE @date date
+		SET @date = GETDATE()
+		SET @Count = 1;
+		SET @EndCount = (SELECT TOP(1) [Tour].[id]
+							FROM [Tour]
+							ORDER BY [Tour].[id] DESC)
+		WHILE @Count < @EndCount
+			BEGIN
+				IF(@date > (SELECT [Tour].[finishDate]
+								FROM [Tour]
+								WHERE [Tour].[id] = @Count))
+					BEGIN
+						DELETE FROM [Tour] WHERE [Tour].[id] = @Count
+				
+						UPDATE [VisitCountryCity]
+						SET [tourArchiveId] = @Count
+						WHERE [tourId] IS NULL AND [tourArchiveId] IS NULL;
 
-		UPDATE [MemorablePlaces]
-		SET [tourArchiveId] = @ID
-		WHERE [tourId] IS NULL;
+						UPDATE [MemorablePlaces]
+						SET [tourArchiveId] = @Count
+						WHERE [tourId] IS NULL AND [tourArchiveId] IS NULL;
 
-		UPDATE [TourHotel]
-		SET [tourArchiveId] = @ID
-		WHERE [tourId] IS NULL;
+						UPDATE [TourHotel]
+						SET [tourArchiveId] = @Count
+						WHERE [tourId] IS NULL AND [tourArchiveId] IS NULL;
 
-		UPDATE [LastTourList]
-		SET [tourArchiveId] = @ID
-		WHERE [tourId] IS NULL;
+						UPDATE [LastTourList]
+						SET [tourArchiveId] = @Count
+						WHERE [tourId] IS NULL AND [tourArchiveId] IS NULL;
 
-		UPDATE [CustomerTourPayedList]
-		SET [tourArchiveId] = @ID
-		WHERE [tourId] IS NULL;
+						UPDATE [CustomerTourPayedList]
+						SET [tourArchiveId] = @Count
+						WHERE [tourId] IS NULL AND [tourArchiveId] IS NULL;
 
-		UPDATE [TransportModeList]
-		SET [tourArchiveId] = @ID
-		WHERE [tourId] IS NULL;
+						UPDATE [TransportModeList]
+						SET [tourArchiveId] = @Count
+						WHERE [tourId] IS NULL AND [tourArchiveId] IS NULL;
+
+					END
+			SET @Count = @Count + 1
+			END;
+
+	PRINT ('Не актуальні тури було переміщенно до Архівних Турів')
 	END
 GO
 -------------------------END-------------------------
@@ -54,9 +81,7 @@ SELECT *
 FROM [Tour]
 
 --переміщення Турів які скінчились до АРХІВУ ТУРІВ
-DELETE 
-FROM [Tour]
-WHERE [Tour].[finishDate] < GETDATE()
+EXEC DeleteNotActualTour
 
 --- Переглянемо тури після змін
 SELECT *
@@ -260,6 +285,50 @@ GO
 -----------------------Перевірка роботи--------------
 SELECT * 
 FROM [vTopTourByByedTickets]
+--------------------****************************Кінець перевірки****************************----------------------
+
+----************************************************************************************************************************
+/* Показати найпопулярніший архівний тур (за максимальною кількістю куплених туристичних путівок); */
+---------------------ВЬЮХА-----------------------
+GO
+CREATE VIEW [vTopArhiveTourByByedTickets]
+AS
+		SELECT TOP(1)
+				[TA].[name] AS 'Назва туру',
+				[TA].[price] AS 'Вартість',
+				[TA].[startDate] AS 'Дата почачтку',
+				[TA].[finishDate] AS 'Дата закінчення',
+				[TA].[maxTouristCount] AS 'Ємність туру (людей)',
+				[CTPL].[HwMany] AS 'Кількість куплених турів'
+			FROM [TourArhive] AS [TA] JOIN (SELECT [tourArchiveId] AS 'tourId', COUNT([customerId]) AS 'HwMany'
+									FROM [CustomerTourPayedList]
+									GROUP BY [tourArchiveId]) AS [CTPL] 
+				ON [TA].[id] = [CTPL].[tourId]
+			ORDER BY [CTPL].[HwMany] DESC
+GO
+-------------------------END-------------------------
+
+-----------------------Перевірка роботи--------------
+SELECT * 
+FROM [vTopArhiveTourByByedTickets]
+--------------------****************************Кінець перевірки****************************----------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -285,5 +354,3 @@ SELECT
 DISTINCT [VisitCountryCity].[countryId] AS 'CountryID',
 [VisitCountryCity].[tourId] AS 'tourId'
 FROM [VisitCountryCity]
-
-
