@@ -674,30 +674,84 @@ ORDER BY [id] DESC
 --------------------****************************Кінець перевірки****************************----------------------
 
 ----************************************************************************************************************************
-/*  */
+/* При додаванні нового туриста в тур перевіряти чи не досягнуто вже максимальної кількості. 
+Якщо максимальна кількість досягнуто, генерувати помилку з інформацією про проблему */
+---------------------ТРИГЕР-----------------------
+GO
+CREATE TRIGGER CheckOverflowTour
+ON [CustomerTourPayedList]
+INSTEAD OF INSERT 
+AS
+	BEGIN
+		DECLARE @tourID int
+
+	SELECT 
+		@tourID = [inserted].[tourId]
+	FROM [inserted]
 
 
+	DECLARE @FreePlaces int
+	SET @FreePlaces = (SELECT 
+							[T].[maxTouristCount] - [CTPL].[HwMany]
+						FROM [Tour] AS [T] JOIN (SELECT [tourId] AS 'tourId', COUNT([customerId]) AS 'HwMany'
+													FROM [CustomerTourPayedList]
+													GROUP BY [tourId]) AS [CTPL] ON [T].[id] = [CTPL].[tourId]
+						WHERE [T].[id] = @tourID)
+
+	IF (@FreePlaces <= 0)
+		BEGIN
+			RAISERROR('Досягнут ліміт за максимальною кількістю людей у турі!',0,1)
+			ROLLBACK TRANSACTION
+		END
+	ELSE
+		BEGIN
+
+			INSERT INTO [CustomerTourPayedList] ([tourId],[customerId])
+			SELECT [tourId],[customerId]
+			FROM [inserted]
+				
+			PRINT ('Кліента успішно підписано на тур')
+		END
+	END
+---------------------ВЬЮХА-----------------------
+--Для зручності сторемо вьюху яка покаже АйдіТура - ВільнихМісць
+GO
+CREATE VIEW [vShowFreePlacesInTours]
+AS
+	SELECT 
+		[T].[id] AS 'TourId',
+		[T].[maxTouristCount] - [CTPL].[HwMany] AS 'Вільних місць у турі'
+	FROM [Tour] AS [T] JOIN (SELECT [tourId] AS 'tourId', COUNT([customerId]) AS 'HwMany'
+							  FROM [CustomerTourPayedList]
+							  GROUP BY [tourId]) AS [CTPL] ON [T].[id] = [CTPL].[tourId]
+GO
+-------------------------END-------------------------
+-----------------------Перевірка роботи--------------
+
+---Переглянемо тури і вільні місця у них
+SELECT * FROM [vShowFreePlacesInTours]
+
+---Переглянемо користувачів
+SELECT * FROM [Customers]
+
+---Спроба підписати на архівний тур (СПОЙЛЕР: НЕ вийде так як база так побудована)
+INSERT [CustomerTourPayedList] ([tourId],[customerId]) 
+VALUES (1,18)
+
+---Спроба підписати на переповнений тур
+INSERT [CustomerTourPayedList] ([tourId],[customerId]) 
+VALUES (12,18)
+
+---Спроба підписати на тур у якому є вільне місці і який не є архівним
+INSERT [CustomerTourPayedList] ([tourId],[customerId]) 
+VALUES (15,18)
+
+--------------------****************************Кінець перевірки****************************----------------------
+
+----************************************************************************************************************************
+/* ■ Відобразити інформацію про те, де знаходиться конкретний турист з ПІБ. Якщо турист не в турі згенерувати помилку 
+з описом проблеми, що виникла. ПІБ туриста передається як параметр; */
 
 
-
-
-
-
-
---------------------ПОКА НЕ УДАЛЯТЬ
-SELECT *
-FROM [Tour]
-
-SELECT
-	[VCC].[tourId] AS 'tourId',
-	STRING_AGG(CONVERT(nvarchar(MAX), [Ctry].[countryName]), ', ') AS 'Countrys'
-FROM (SELECT DISTINCT [VisitCountryCity].[countryId] AS 'CountryID', [VisitCountryCity].[tourId] AS 'tourId'
-		FROM [VisitCountryCity]) AS [VCC] JOIN [Country] AS [Ctry] ON [VCC].[countryId] = [Ctry].[id]
-GROUP BY [VCC].[tourId]
-
-
-
-SELECT 
-DISTINCT [VisitCountryCity].[countryId] AS 'CountryID',
-[VisitCountryCity].[tourId] AS 'tourId'
-FROM [VisitCountryCity]
+-------------------------END-------------------------
+-----------------------Перевірка роботи--------------
