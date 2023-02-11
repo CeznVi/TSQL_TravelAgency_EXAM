@@ -432,7 +432,7 @@ GO
 -----------------------Перевірка роботи--------------
 --Трохи змінемо існуюючу базу для перевірки роботи функції
 UPDATE [Tour]
-SET [startDate] = GETDATE() - 2
+SET [startDate] = GETDATE() - 1
 WHERE [id] = 30;
 
 --Подивимось конкретного туриста Покупець3 Турів3 Покупуйченко3
@@ -445,6 +445,163 @@ SET [startDate] = '2023-04-04'
 WHERE [id] = 30;
 --------------------****************************Кінець перевірки****************************----------------------
 
+----************************************************************************************************************************
+/* Відобразити інформацію про найактивнішого туриста (за кількістю придбаних турів) */
+---------------------ВЬЮХА-----------------------
+GO
+CREATE VIEW [vTopCustomerByByedTour]
+AS
+		SELECT TOP(1)
+			[C].[firstName] + SPACE(1) + [C].[surName] + SPACE(1) + [C].[lastName] AS 'ПІБ, найактивнішого туриста',
+			[TEMP].[HowMany] AS 'Кількість придбаних турів',
+			[C].[birthDay] AS 'Дата народження',
+			[C].[email] AS 'Електрона пошта',
+			[CC].[code] + SPACE(1) + [N].[number] AS 'Телефонний номер'
+		FROM (	SELECT 
+					[CTPL].[customerId] AS 'customerId',
+					COUNT([CTPL].[id]) AS 'HowMany'
+				FROM [CustomerTourPayedList] AS [CTPL] 
+				GROUP BY [customerId]) AS [TEMP] JOIN [Customers] AS [C] ON [TEMP].[customerId] = [C].[id]
+			JOIN [Telephone] AS [T] ON [T].[id] = [C].[telephoneId] 
+			JOIN [CountryCode] AS [CC] ON [CC].[id] = [T].[countryCodeId]
+			JOIN [Number] AS [N] ON [N].[id] = [T].[numberId]
+		ORDER BY [TEMP].[HowMany] DESC
+GO
+-------------------------END-------------------------
+
+-----------------------Перевірка роботи--------------
+SELECT * 
+FROM [vTopCustomerByByedTour]
+--------------------****************************Кінець перевірки****************************----------------------
+
+----************************************************************************************************************************
+/* Відобразити інформацію про найпопулярніший готель серед туристів (за кількістю туристів) */
+---------------------ВЬЮХА-----------------------
+GO
+CREATE VIEW [vTopHotelByByedTour]
+AS
+		SELECT TOP(1) 
+				[H].[name] AS 'Назва найпопулярнішого готелю',
+				[TEMP].[byeCount] AS 'Кількість побувавших туристів',
+				[H].[description] AS 'Опис',
+				[H].[starCount] AS 'Кількість зірок',
+				[CC].[code] + SPACE(1) + [N].[number] AS 'Телефонний номер',
+				[C].[countryName] + ', ' + [Ci].[cityName] AS 'Місце знаходження'
+		FROM (
+				SELECT 
+						[TH].[hotelId] AS 'hotelId',
+						[CTPL].[HwMany] AS 'byeCount'
+					FROM [Tour] AS [T] JOIN (SELECT [tourId] AS 'tourId', COUNT([customerId]) AS 'HwMany'
+											FROM [CustomerTourPayedList]
+											GROUP BY [tourId]) AS [CTPL] 
+						ON [T].[id] = [CTPL].[tourId]
+						JOIN [TourHotel] AS [TH] ON [TH].[tourId] = [T].[id]
+			
+				UNION ALL
+				SELECT
+						[TH].[hotelId] AS 'hotelId',
+						[CTPL].[HwMany]
+					FROM [TourArhive] AS [TA] JOIN (SELECT [tourArchiveId] AS 'tourId', COUNT([customerId]) AS 'HwMany'
+											FROM [CustomerTourPayedList]
+											GROUP BY [tourArchiveId]) AS [CTPL] 
+						ON [TA].[id] = [CTPL].[tourId]
+						JOIN [TourHotel] AS [TH] ON [TH].[tourArchiveId] = [TA].[id]
+			) AS [TEMP] JOIN [Hotel] AS [H] ON [H].[id] = [TEMP].[hotelId]
+			JOIN [Telephone] AS [T] ON [T].[id] = [H].[telephoneId] 
+			JOIN [CountryCode] AS [CC] ON [CC].[id] = [T].[countryCodeId]
+			JOIN [Number] AS [N] ON [N].[id] = [T].[numberId]
+			JOIN [Country] AS [C] ON [C].[id] = [H].[countryId]
+			JOIN [City] AS [Ci] ON [Ci].[id] = [H].[cityId]
+			ORDER BY [byeCount] DESC
+GO
+-------------------------END-------------------------
+
+-----------------------Перевірка роботи--------------
+SELECT * 
+FROM [vTopHotelByByedTour]
+--------------------****************************Кінець перевірки****************************----------------------
+
+----************************************************************************************************************************
+/* Відобразити інформацію про всі тури вказаного способу пересування. Спосіб пересування передається як параметр */
+---------------------ФУНКЦІЯ-----------------------
+GO
+CREATE FUNCTION [dbo].GetInformationByTourByTypeTransport(@TypeTransport nvarchar(50))
+RETURNS TABLE
+AS
+	RETURN (
+		   SELECT 
+				[T].[name] AS 'Назва туру',
+				[T].[price] AS 'Вартість',
+				[T].[startDate] AS 'Дата почачтку',
+				[T].[finishDate] AS 'Дата закінчення',
+				[TC].[Countrys] AS 'Відвідуємі країни',
+				[TML].[TypeOfTrans] AS 'Способи пересування у турі',
+				[T].[maxTouristCount] AS 'Максимальна кількість туристів',
+				[CTPL].[HwMany] AS 'Кількість придбаних турів'
+			FROM [Tour] AS [T] JOIN (SELECT [tourId] AS 'tourId', COUNT([customerId]) AS 'HwMany'
+									FROM [CustomerTourPayedList]
+									GROUP BY [tourId]) AS [CTPL] ON [T].[id] = [CTPL].[tourId]
+				JOIN (SELECT
+							[VCC].[tourId] AS 'tourId',
+							STRING_AGG(CONVERT(nvarchar(MAX), [Ctry].[countryName]), ', ') AS 'Countrys'
+						FROM (SELECT DISTINCT [VisitCountryCity].[countryId] AS 'CountryID', [VisitCountryCity].[tourId] AS 'tourId'
+								FROM [VisitCountryCity]) AS [VCC] JOIN [Country] AS [Ctry] ON [VCC].[countryId] = [Ctry].[id]
+						GROUP BY [VCC].[tourId]) AS [TC]
+					ON [T].[id] = [TC].[tourId]
+				JOIN (SELECT
+							[TML].[tourId] AS 'tourId',
+							STRING_AGG(CONVERT(nvarchar(MAX), [Trans].[typeOfTransport]), ', ') AS 'TypeOfTrans'
+						FROM (SELECT DISTINCT [TransportModeList].[transportId] AS 'transportID', 
+											  [TransportModeList].[tourId] AS 'tourId'
+							  FROM [TransportModeList]) AS [TML] JOIN [Transport] AS [Trans] ON [TML].[transportID] = [Trans].[id]
+						GROUP BY [TML].[tourId]) AS [TML] ON [TML].[tourId] = [T].[id]
+			WHERE [TML].[TypeOfTrans] LIKE @TypeTransport
+		UNION ALL
+		SELECT 
+				[T].[name],
+				[T].[price],
+				[T].[startDate],
+				[T].[finishDate],
+				[TC].[Countrys],
+				[TML].[TypeOfTrans],
+				[T].[maxTouristCount],
+				[CTPL].[HwMany]
+			FROM [TourArhive] AS [T] JOIN (SELECT [tourArchiveId] AS 'tourId', COUNT([customerId]) AS 'HwMany'
+									FROM [CustomerTourPayedList]
+									GROUP BY [tourArchiveId]) AS [CTPL] ON [T].[id] = [CTPL].[tourId]
+				JOIN (SELECT
+							[VCC].[tourId] AS 'tourId',
+							STRING_AGG(CONVERT(nvarchar(MAX), [Ctry].[countryName]), ', ') AS 'Countrys'
+						FROM (SELECT DISTINCT [VisitCountryCity].[countryId] AS 'CountryID', [VisitCountryCity].[tourArchiveId] AS 'tourId'
+								FROM [VisitCountryCity]) AS [VCC] JOIN [Country] AS [Ctry] ON [VCC].[countryId] = [Ctry].[id]
+						GROUP BY [VCC].[tourId]) AS [TC]
+					ON [T].[id] = [TC].[tourId]
+				JOIN (SELECT
+							[TML].[tourId] AS 'tourId',
+							STRING_AGG(CONVERT(nvarchar(MAX), [Trans].[typeOfTransport]), ', ') AS 'TypeOfTrans'
+						FROM (SELECT DISTINCT [TransportModeList].[transportId] AS 'transportID', 
+											  [TransportModeList].[tourArchiveId] AS 'tourId'
+							  FROM [TransportModeList]) AS [TML] JOIN [Transport] AS [Trans] ON [TML].[transportID] = [Trans].[id]
+						GROUP BY [TML].[tourId]) AS [TML] ON [TML].[tourId] = [T].[id]
+			WHERE [TML].[TypeOfTrans] LIKE @TypeTransport
+			)
+GO
+-------------------------END-------------------------
+
+-----------------------Перевірка роботи--------------
+---Переглянемо тури у яких тільки піший спосіб пересування
+SELECT *
+FROM [dbo].GetInformationByTourByTypeTransport('піший')
+---Подивимось тури у яких піший спосіб пересування та інші способи
+SELECT *
+FROM [dbo].GetInformationByTourByTypeTransport('%піший%')
+---Подивимось тури у яких тільки катер спосіб пересування 
+SELECT *
+FROM [dbo].GetInformationByTourByTypeTransport('катер')
+---Подивимось тури у яких тільки автобус спосіб пересування 
+SELECT *
+FROM [dbo].GetInformationByTourByTypeTransport('автобус')
+--------------------****************************Кінець перевірки****************************----------------------
 
 
 
@@ -457,8 +614,6 @@ WHERE [id] = 30;
 --------------------ПОКА НЕ УДАЛЯТЬ
 SELECT *
 FROM [Tour]
-
-
 
 SELECT
 	[VCC].[tourId] AS 'tourId',
