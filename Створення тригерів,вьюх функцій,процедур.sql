@@ -751,6 +751,36 @@ VALUES (15,18)
 ----************************************************************************************************************************
 /* ■ Відобразити інформацію про те, де знаходиться конкретний турист з ПІБ. Якщо турист не в турі згенерувати помилку 
 з описом проблеми, що виникла. ПІБ туриста передається як параметр; */
+--Створимо домоміжну функцію 
+---------------------ФУНКЦІЯ-----------------------
+GO
+CREATE FUNCTION [dbo].GetInfoByTouristOnTour(@PIB nvarchar(155))
+RETURNS TABLE
+AS
+	RETURN (
+		   SELECT 
+				CAST(GETDATE() AS Date) AS 'Дата',
+				[T].[name] AS 'Назва туру',
+				[T].[startDate] AS 'Дата почачтку тура',
+				[T].[finishDate] AS 'Дата закінчення тура',
+				[Country].[countryName] + ', ' + [City].[cityName] AS 'Країна/місто',
+				[Hotel].[name] AS 'Готель'
+			FROM [Tour] AS [T] JOIN [CustomerTourPayedList] AS [CTPL] ON [T].[id] = [CTPL].[tourId]
+				 JOIN (SELECT 
+						[Customers].[id] AS 'id',
+						[Customers].[firstName] + SPACE(1) + [Customers].[surName] + SPACE(1) + [Customers].[lastName] AS 'PIB'
+					   FROM [Customers]) AS [C] ON [CTPL].[customerId] = [C].[id]
+				JOIN [VisitCountryCity] AS [VCC] ON [VCC].[tourId] = [T].[id]
+				JOIN [Country] ON [Country].[id] = [VCC].[countryId]
+				JOIN [City] ON [City].[id] = [VCC].[cityId]
+				JOIN [Hotel] ON [Hotel].[cityId] = [City].[id]
+			WHERE [C].[PIB] LIKE @PIB
+				  AND [VCC].[visitDate] = CAST(GETDATE() AS Date) 
+			)
+GO
+
+
+---------------------ПРОЦЕДУРА-----------------------
 GO
 CREATE PROCEDURE WhereIsTouristByPIB
 @PIB nvarchar(155)
@@ -767,7 +797,8 @@ CREATE PROCEDURE WhereIsTouristByPIB
 					IF(EXISTS(SELECT * 
 								FROM [dbo].GetInformationByTouristOnTourNow(@PIB)))
 						BEGIN
-							RAISERROR('ТУРИСТ У ТУРІ',0,1)
+							SELECT *
+							FROM [dbo].GetInfoByTouristOnTour(@PIB)
 						END
 					ELSE
 						BEGIN
@@ -791,26 +822,18 @@ EXEC WhereIsTouristByPIB 'Покупець5 Турів5 Покупайченко
 ---Показати інформацію про туриста який знаходиться у турі
 ---Але потрібно дещо змінити, щоб данні вивелись на екран
 
-UPDATE [Tour] SET [startDate] = GETDATE() - 1 WHERE [id] = 30;
-
-
-
---Подивимось конкретного туриста Покупець3 Турів3 Покупуйченко3
-SELECT * 
-FROM [dbo].GetInformationByTouristOnTourNow('%Покупець3 Турів3 Покупуйченко3%')
-
---ПОВЕРНЕМО назад зміни
-UPDATE [Tour]
-SET [startDate] = '2023-04-04'
+UPDATE [Tour] 
+SET 
+	[startDate] = GETDATE() - 1 ,
+	[finishDate] = GETDATE() + 10
 WHERE [id] = 30;
 
-----вивести де користувач (країна, місто, готель)
+UPDATE [VisitCountryCity]
+SET
+	[visitDate] = GETDATE()
+WHERE [VisitCountryCity].[tourId] = 30
+		AND [VisitCountryCity].[id] = 67
 
+--Подивимось конкретного туриста Покупець3 Турів3 Покупуйченко3
+EXEC WhereIsTouristByPIB 'Покупець3 Турів3 Покупуйченко3'
 
-
-
-
-
-		   
--------------------------END-------------------------
------------------------Перевірка роботи--------------
